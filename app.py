@@ -542,7 +542,16 @@ def auth_flow():
             
             # Reindirizza alla home page pulendo i parametri
             st.set_query_params()
-            st.switch_page("app.py")  # Reindirizza alla pagina principale
+
+            # Reindirizza usando JavaScript
+            st.markdown(
+                f"""
+                <script>
+                    window.location.href = "/";
+                </script>
+                """,
+                unsafe_allow_html=True
+            )
             
         except Exception as e:
             st.error(f"Error during authentication: {str(e)}")
