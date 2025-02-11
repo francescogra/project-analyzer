@@ -500,50 +500,10 @@ def auth_flow():
             redirect_uri=REDIRECT_URI
         )
         
-        # Verifica se siamo nella pagina di callback
-        if '_oauth/google' in st.request_url():
-            try:
-                # Estrai il codice dalla query
-                auth_code = st.query_params.get("code")
-                if not auth_code:
-                    st.error("No authorization code found")
-                    return None
-
-                # Scambia il codice per le credenziali
-                flow.fetch_token(code=auth_code)
-                credentials = flow.credentials
-
-                # Ottieni le informazioni dell'utente
-                service = build('oauth2', 'v2', credentials=credentials)
-                user_info = service.userinfo().get().execute()
-
-                # Debug: mostra le informazioni dell'utente
-                st.write("Debug - User info:", user_info)
-
-                # Verifica l'autorizzazione
-                with open('allowed_emails.txt', 'r') as f:
-                    allowed_emails = [email.strip() for email in f.readlines()]
-
-                if user_info.get('email') not in allowed_emails:
-                    st.error(f"Access denied. Email {user_info.get('email')} is not authorized.")
-                    return None
-
-                # Salva l'utente e reindirizza
-                st.session_state.user = user_info
-                
-                # Reindirizza alla home page
-                st.markdown(
-                    """
-                    <meta http-equiv="refresh" content="0; url=/">
-                    """,
-                    unsafe_allow_html=True
-                )
-                return user_info
-
-            except Exception as e:
-                st.error(f"Error during authentication: {str(e)}")
-                return None
-        else:
+        # Estrai il codice dalla query
+        auth_code = st.query_params.get("code")
+        
+        if not auth_code:
             # Genera l'URL di login
             auth_url, _ = flow.authorization_url(
                 access_type='offline',
@@ -552,9 +512,63 @@ def auth_flow():
             )
             st.markdown(f"[Login with Google]({auth_url})")
             return None
+        
+        try:
+            # Debug: mostra il codice di autorizzazione
+            st.write("Debug - Authorization code received:", auth_code)
+            
+            # Scambia il codice per le credenziali
+            flow.fetch_token(code=auth_code)
+            credentials = flow.credentials
+
+            # Ottieni le informazioni dell'utente
+            service = build('oauth2', 'v2', credentials=credentials)
+            user_info = service.userinfo().get().execute()
+
+            # Debug: mostra le informazioni dell'utente
+            st.write("Debug - User info:", user_info)
+
+            # Verifica l'autorizzazione
+            with open('allowed_emails.txt', 'r') as f:
+                allowed_emails = [email.strip() for email in f.readlines()]
+                # Debug: mostra le email autorizzate
+                st.write("Debug - Allowed emails:", allowed_emails)
+
+            if user_info.get('email') not in allowed_emails:
+                st.error(f"Access denied. Email {user_info.get('email')} is not authorized.")
+                return None
+
+            # Salva l'utente nella sessione
+            st.session_state.user = user_info
+            
+            # Debug: conferma che l'utente è stato salvato
+            st.write("Debug - User saved in session:", st.session_state.user is not None)
+            
+            # Pulisci i parametri della query e reindirizza
+            st.set_query_params()
+            
+            # Reindirizza alla home page
+            st.markdown(
+                """
+                <meta http-equiv="refresh" content="0; url=/">
+                <script>
+                    window.location.href = "/";
+                </script>
+                """,
+                unsafe_allow_html=True
+            )
+            return user_info
+
+        except Exception as e:
+            st.error(f"Error during authentication: {str(e)}")
+            # Debug: mostra l'errore completo
+            st.write("Debug - Authentication error details:", str(e))
+            return None
 
     except Exception as e:
         st.error(f"Error in auth flow: {str(e)}")
+        # Debug: mostra l'errore completo
+        st.write("Debug - Flow error details:", str(e))
         return None
 
 def extract_score_from_analysis(analysis_text, max_points):
