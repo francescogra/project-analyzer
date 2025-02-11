@@ -494,50 +494,53 @@ def extract_text_from_pdf(pdf_file):
 
 def auth_flow():
     try:
-        # Create flow instance
+        # Crea l'istanza del flow OAuth usando il file client secret
         flow = Flow.from_client_secrets_file(
             'client_secret_487298376198-140i5gfel69hkaue4jqn27kjgo3s74k1.apps.googleusercontent.com.json',
             scopes=['openid', 'https://www.googleapis.com/auth/userinfo.profile', 'https://www.googleapis.com/auth/userinfo.email'],
             redirect_uri=REDIRECT_URI
         )
-
-        # Get authorization code from URL parameters
+        
+        # Recupera il codice di autorizzazione dai parametri della query
         auth_code = st.query_params.get("code")
         
         if not auth_code:
-            # Generate authorization URL
+            # Se non c'è il codice, genera l'URL di login
             auth_url, _ = flow.authorization_url(
                 access_type='offline',
                 include_granted_scopes='true',
-                prompt='consent'  # Force consent screen
+                prompt='consent'
             )
-            st.markdown(f'[Login with Google]({auth_url})')
+            st.markdown(f"[Login with Google]({auth_url})")
             return None
 
-        # Exchange auth code for credentials
         try:
+            # Scambia il codice con le credenziali
             flow.fetch_token(code=auth_code)
             credentials = flow.credentials
-
-            # Get user info using credentials
+            
+            # Usa le credenziali per ottenere i dati dell'utente
             service = build('oauth2', 'v2', credentials=credentials)
             user_info = service.userinfo().get().execute()
-
-            # Check if user exists in allowed_emails.txt
+            
+            # Pulisci la query string per evitare che il codice continui ad essere presente
+            st.experimental_set_query_params()
+            
+            # Controlla se l'email dell'utente è autorizzata (vedi allowed_emails.txt)
             with open('allowed_emails.txt', 'r') as f:
                 allowed_emails = [email.strip() for email in f.readlines()]
             
             if user_info['email'] not in allowed_emails:
                 st.error("Access denied. Your email is not authorized to use this application.")
                 return None
-
+            
             return user_info
+        
         except Exception as e:
             st.error(f"Error during authentication: {str(e)}")
-            # Clear URL parameters to allow retrying
-            st.experimental_set_query_params()
+            st.experimental_set_query_params()  # Pulisci i parametri per permettere un nuovo tentativo
             return None
-
+        
     except Exception as e:
         st.error(f"Error in auth flow: {str(e)}")
         return None
