@@ -494,19 +494,57 @@ def extract_text_from_pdf(pdf_file):
 
 def auth_flow():
     try:
-        # Crea l'istanza del flow OAuth usando il file client secret
         flow = Flow.from_client_secrets_file(
             'client_secret_487298376198-140i5gfel69hkaue4jqn27kjgo3s74k1.apps.googleusercontent.com.json',
             scopes=['openid', 'https://www.googleapis.com/auth/userinfo.profile', 'https://www.googleapis.com/auth/userinfo.email'],
             redirect_uri=REDIRECT_URI
         )
         
-        # Recupera i parametri della query usando la nuova API
-        query_params = st.query_params
-        auth_code = query_params.get("code")
-        
-        # Se non c'è il codice, genera l'URL di login
-        if not auth_code:
+        # Verifica se siamo nella pagina di callback
+        if '_oauth/google' in st.request_url():
+            try:
+                # Estrai il codice dalla query
+                auth_code = st.query_params.get("code")
+                if not auth_code:
+                    st.error("No authorization code found")
+                    return None
+
+                # Scambia il codice per le credenziali
+                flow.fetch_token(code=auth_code)
+                credentials = flow.credentials
+
+                # Ottieni le informazioni dell'utente
+                service = build('oauth2', 'v2', credentials=credentials)
+                user_info = service.userinfo().get().execute()
+
+                # Debug: mostra le informazioni dell'utente
+                st.write("Debug - User info:", user_info)
+
+                # Verifica l'autorizzazione
+                with open('allowed_emails.txt', 'r') as f:
+                    allowed_emails = [email.strip() for email in f.readlines()]
+
+                if user_info.get('email') not in allowed_emails:
+                    st.error(f"Access denied. Email {user_info.get('email')} is not authorized.")
+                    return None
+
+                # Salva l'utente e reindirizza
+                st.session_state.user = user_info
+                
+                # Reindirizza alla home page
+                st.markdown(
+                    """
+                    <meta http-equiv="refresh" content="0; url=/">
+                    """,
+                    unsafe_allow_html=True
+                )
+                return user_info
+
+            except Exception as e:
+                st.error(f"Error during authentication: {str(e)}")
+                return None
+        else:
+            # Genera l'URL di login
             auth_url, _ = flow.authorization_url(
                 access_type='offline',
                 include_granted_scopes='true',
@@ -514,53 +552,9 @@ def auth_flow():
             )
             st.markdown(f"[Login with Google]({auth_url})")
             return None
-        
-        try:
-            # Scambia il codice con le credenziali
-            flow.fetch_token(code=auth_code)
-            credentials = flow.credentials
-            
-            # Usa le credenziali per ottenere i dati dell'utente
-            service = build('oauth2', 'v2', credentials=credentials)
-            user_info = service.userinfo().get().execute()
-            
-            # Se 'profile' non esiste, usa 'picture' come alias
-            if 'profile' not in user_info and 'picture' in user_info:
-                user_info['profile'] = user_info['picture']
-            
-            # Controlla se l'email dell'utente è autorizzata
-            with open('allowed_emails.txt', 'r') as f:
-                allowed_emails = [email.strip() for email in f.readlines()]
-            
-            if user_info['email'] not in allowed_emails:
-                st.error("Access denied. Your email is not authorized to use this application.")
-                st.set_query_params()
-                return None
-            
-            # Salva i dati dell'utente nella sessione
-            st.session_state.user = user_info
-            
-            # Reindirizza alla home page pulendo i parametri
-            st.set_query_params()
 
-            # Reindirizza usando JavaScript
-            st.markdown(
-                f"""
-                <script>
-                    window.location.href = "/";
-                </script>
-                """,
-                unsafe_allow_html=True
-            )
-            
-        except Exception as e:
-            st.error(f"Error during authentication: {str(e)}")
-            st.set_query_params()
-            return None
-            
     except Exception as e:
         st.error(f"Error in auth flow: {str(e)}")
-        st.set_query_params()
         return None
 
 def extract_score_from_analysis(analysis_text, max_points):
