@@ -514,9 +514,6 @@ def auth_flow():
             return None
         
         try:
-            # Debug: mostra il codice di autorizzazione
-            st.write("Debug - Authorization code received:", auth_code)
-            
             # Scambia il codice per le credenziali
             flow.fetch_token(code=auth_code)
             credentials = flow.credentials
@@ -525,51 +522,43 @@ def auth_flow():
             service = build('oauth2', 'v2', credentials=credentials)
             user_info = service.userinfo().get().execute()
 
-            # Debug: mostra le informazioni dell'utente
-            st.write("Debug - User info:", user_info)
+            # Assicurati che il profilo sia presente
+            if 'picture' in user_info:
+                user_info['profile'] = user_info['picture']
+            
+            st.write("Authentication successful!")
+            st.write("User info:", user_info)
 
             # Verifica l'autorizzazione
             with open('allowed_emails.txt', 'r') as f:
                 allowed_emails = [email.strip() for email in f.readlines()]
-                # Debug: mostra le email autorizzate
-                st.write("Debug - Allowed emails:", allowed_emails)
 
             if user_info.get('email') not in allowed_emails:
                 st.error(f"Access denied. Email {user_info.get('email')} is not authorized.")
-                return None
+                st.stop()
 
             # Salva l'utente nella sessione
             st.session_state.user = user_info
+            st.session_state.is_authenticated = True
             
-            # Debug: conferma che l'utente è stato salvato
-            st.write("Debug - User saved in session:", st.session_state.user is not None)
-            
-            # Pulisci i parametri della query e reindirizza
+            # Pulisci i parametri della query
             st.set_query_params()
             
-            # Reindirizza alla home page
+            # Reindirizza alla home
+            st.success("Login successful! Redirecting...")
             st.markdown(
-                """
-                <meta http-equiv="refresh" content="0; url=/">
-                <script>
-                    window.location.href = "/";
-                </script>
-                """,
+                f'<meta http-equiv="refresh" content="2; url={REDIRECT_URI.split("/_oauth")[0]}">', 
                 unsafe_allow_html=True
             )
             return user_info
 
         except Exception as e:
             st.error(f"Error during authentication: {str(e)}")
-            # Debug: mostra l'errore completo
-            st.write("Debug - Authentication error details:", str(e))
-            return None
+            st.stop()
 
     except Exception as e:
         st.error(f"Error in auth flow: {str(e)}")
-        # Debug: mostra l'errore completo
-        st.write("Debug - Flow error details:", str(e))
-        return None
+        st.stop()
 
 def extract_score_from_analysis(analysis_text, max_points):
     # Look for common score patterns in the text
@@ -1257,4 +1246,23 @@ def main():
         cleanup_temp_files()
 
 if __name__ == "__main__":
-    main()
+    # Inizializza lo stato di autenticazione
+    if 'user' not in st.session_state:
+        st.session_state.user = None
+    if 'is_authenticated' not in st.session_state:
+        st.session_state.is_authenticated = False
+
+    # Mostra la pagina di login o l'app principale
+    if not st.session_state.is_authenticated:
+        st.markdown("""
+            <div class="main-header">
+                <h1>Welcome to NOVA Crypto Analyzer</h1>
+                <p>Please sign in with Google to access the application</p>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # Gestisci l'autenticazione
+        auth_flow()
+    else:
+        # Mostra l'app principale
+        main()
