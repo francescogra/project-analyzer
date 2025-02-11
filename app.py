@@ -501,8 +501,8 @@ def auth_flow():
             redirect_uri=REDIRECT_URI
         )
         
-        # Recupera i parametri della query in modo sicuro
-        query_params = st.experimental_get_query_params()
+        # Recupera i parametri della query usando la nuova API
+        query_params = st.query_params  # schema non experimental
         auth_code_list = query_params.get("code")
         
         # Se non esiste un codice, genera l'URL di login
@@ -515,7 +515,7 @@ def auth_flow():
             st.markdown(f"[Login with Google]({auth_url})")
             return None
         
-        # Usa il primo codice (questo se ne ricevi più di uno)
+        # Usa il primo codice (se ne ricevi più di uno)
         auth_code = auth_code_list[0]
         
         # Scambia il codice con le credenziali
@@ -529,11 +529,11 @@ def auth_flow():
         # Se 'profile' non esiste, usa 'picture' come alias
         if 'profile' not in user_info and 'picture' in user_info:
             user_info['profile'] = user_info['picture']
-        
-        # Visualizza i dati utente a scopo di debug
+
+        # Per debug: mostra le informazioni dell'utente
         st.write("User info:", user_info)
         
-        # Controlla se l'email dell'utente è autorizzata (leggi allowed_emails.txt)
+        # Controlla se l'email dell'utente è autorizzata
         with open('allowed_emails.txt', 'r') as f:
             allowed_emails = [email.strip() for email in f.readlines()]
         
@@ -541,19 +541,16 @@ def auth_flow():
             st.error("Access denied. Your email is not authorized to use this application.")
             return None
         
-        # Salva le informazioni dell'utente nella sessione
+        # Salva i dati dell'utente nella sessione
         st.session_state.user = user_info
         
-        # Pulisce i parametri della query per evitare loop nel flusso
-        st.experimental_set_query_params()
-        
-        # Forza il re-run dell'app per ricaricare l'interfaccia senza i parametri OAuth
+        # Pulisce i parametri della query per evitare loop ed esegue un re-run senza il parametro 'code'
+        st.set_query_params()  # Cancella i parametri dalla URL
         st.experimental_rerun()
         
     except Exception as e:
         st.error(f"Error during authentication: {str(e)}")
-        # Pulisce i parametri in caso di errore per permettere un nuovo tentativo
-        st.experimental_set_query_params()
+        st.set_query_params()  # Pulisce i parametri in caso di errore
         return None
 
 def extract_score_from_analysis(analysis_text, max_points):
