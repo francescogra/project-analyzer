@@ -502,11 +502,11 @@ def auth_flow():
         )
         
         # Recupera i parametri della query usando la nuova API
-        query_params = st.query_params  # schema non experimental
-        auth_code_list = query_params.get("code")
+        query_params = st.query_params
+        auth_code = query_params.get("code")
         
-        # Se non esiste un codice, genera l'URL di login
-        if not auth_code_list:
+        # Se non c'è il codice, genera l'URL di login
+        if not auth_code:
             auth_url, _ = flow.authorization_url(
                 access_type='offline',
                 include_granted_scopes='true',
@@ -515,42 +515,43 @@ def auth_flow():
             st.markdown(f"[Login with Google]({auth_url})")
             return None
         
-        # Usa il primo codice (se ne ricevi più di uno)
-        auth_code = auth_code_list[0]
-        
-        # Scambia il codice con le credenziali
-        flow.fetch_token(code=auth_code)
-        credentials = flow.credentials
-        
-        # Usa le credenziali per ottenere i dati dell'utente
-        service = build('oauth2', 'v2', credentials=credentials)
-        user_info = service.userinfo().get().execute()
-
-        # Se 'profile' non esiste, usa 'picture' come alias
-        if 'profile' not in user_info and 'picture' in user_info:
-            user_info['profile'] = user_info['picture']
-
-        # Per debug: mostra le informazioni dell'utente
-        st.write("User info:", user_info)
-        
-        # Controlla se l'email dell'utente è autorizzata
-        with open('allowed_emails.txt', 'r') as f:
-            allowed_emails = [email.strip() for email in f.readlines()]
-        
-        if user_info['email'] not in allowed_emails:
-            st.error("Access denied. Your email is not authorized to use this application.")
+        try:
+            # Scambia il codice con le credenziali
+            flow.fetch_token(code=auth_code)
+            credentials = flow.credentials
+            
+            # Usa le credenziali per ottenere i dati dell'utente
+            service = build('oauth2', 'v2', credentials=credentials)
+            user_info = service.userinfo().get().execute()
+            
+            # Se 'profile' non esiste, usa 'picture' come alias
+            if 'profile' not in user_info and 'picture' in user_info:
+                user_info['profile'] = user_info['picture']
+            
+            # Controlla se l'email dell'utente è autorizzata
+            with open('allowed_emails.txt', 'r') as f:
+                allowed_emails = [email.strip() for email in f.readlines()]
+            
+            if user_info['email'] not in allowed_emails:
+                st.error("Access denied. Your email is not authorized to use this application.")
+                st.set_query_params()
+                return None
+            
+            # Salva i dati dell'utente nella sessione
+            st.session_state.user = user_info
+            
+            # Reindirizza alla home page pulendo i parametri
+            st.set_query_params()
+            st.switch_page("app.py")  # Reindirizza alla pagina principale
+            
+        except Exception as e:
+            st.error(f"Error during authentication: {str(e)}")
+            st.set_query_params()
             return None
-        
-        # Salva i dati dell'utente nella sessione
-        st.session_state.user = user_info
-        
-        # Pulisce i parametri della query per evitare loop ed esegue un re-run senza il parametro 'code'
-        st.set_query_params()  # Cancella i parametri dalla URL
-        st.experimental_rerun()
-        
+            
     except Exception as e:
-        st.error(f"Error during authentication: {str(e)}")
-        st.set_query_params()  # Pulisce i parametri in caso di errore
+        st.error(f"Error in auth flow: {str(e)}")
+        st.set_query_params()
         return None
 
 def extract_score_from_analysis(analysis_text, max_points):
